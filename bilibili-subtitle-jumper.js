@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili字幕时间跳转
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @description  使用h和l键在B站视频字幕间快速跳转，r键重复播放当前语句
 // @author       hitori-Janai
 // @match        *://*.bilibili.com/video/*

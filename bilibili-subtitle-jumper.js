@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  使用h和l键在B站视频字幕间快速跳转，r键重复播放当前语句
-// @author       You
+// @author       hitori-Janai
 // @match        *://*.bilibili.com/video/*
 // @grant        none
 // @license      MIT

@@ -2,7 +2,7 @@
 // @name         Bilibili字幕时间跳转
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  使用h和l键在B站视频字幕间快速跳转
+// @description  使用h和l键在B站视频字幕间快速跳转，r键重复播放当前语句
 // @author       You
 // @match        *://*.bilibili.com/video/*
 // @grant        none
@@ -96,6 +96,8 @@
         subtitles: null,
         timePoints: [],
         currentIndex: -1,
+        isRepeating: false, // 是否正在重复播放
+        repeatTimerId: null, // 重复播放的定时器ID
         
         // 初始化字幕数据
         async init() {
@@ -120,7 +122,7 @@
                 console.log(`加载了 ${this.timePoints.length} 个字幕时间点`);
                 
                 // 初始化完成后显示通知
-                this.showNotification('字幕跳转功能已启用 (h-上一个字幕, l-下一个字幕)');
+                this.showNotification('字幕跳转功能已启用 (h-上一个字幕, l-下一个字幕, r-重复播放)');
                 
                 return true;
             } catch (error) {
@@ -147,7 +149,7 @@
             // 查找当前时间前面的最近时间点
             let targetIndex = -1;
             for (let i = this.timePoints.length - 1; i >= 0; i--) {
-                if (this.timePoints[i] < currentTime - 0.5) { // 0.5秒的容错
+                if (this.timePoints[i] < currentTime - 1.0) { // 1.0秒的容错
                     targetIndex = i;
                     break;
                 }
@@ -226,6 +228,87 @@
             const mm = String(Math.floor(seconds/60)).padStart(2,'0');
             const ss = String(Math.floor(seconds%60)).padStart(2,'0');
             return `${mm}:${ss}`;
+        },
+        
+        // 获取当前播放时间所在的字幕索引
+        getCurrentSubtitleIndex() {
+            if (!this.subtitles || !this.timePoints.length) return -1;
+            
+            const videoElement = this.getVideoElement();
+            if (!videoElement) return -1;
+            
+            const currentTime = videoElement.currentTime;
+            
+            // 找到当前时间所在的字幕区间
+            for (let i = 0; i < this.timePoints.length; i++) {
+                const currentStart = this.timePoints[i];
+                const nextStart = (i < this.timePoints.length - 1) ? this.timePoints[i + 1] : Infinity;
+                
+                if (currentTime >= currentStart && currentTime < nextStart) {
+                    return i;
+                }
+            }
+            
+            return -1; // 没有找到匹配的字幕
+        },
+        
+        // 检查并循环播放当前字幕
+        checkAndLoopCurrentSubtitle() {
+            if (!this.isRepeating) return;
+            
+            const videoElement = this.getVideoElement();
+            if (!videoElement) return;
+            
+            const currentTime = videoElement.currentTime;
+            
+            // 如果currentIndex是有效索引
+            if (this.currentIndex >= 0 && this.currentIndex < this.timePoints.length) {
+                const currentStart = this.timePoints[this.currentIndex];
+                const nextStart = (this.currentIndex < this.timePoints.length - 1) 
+                    ? this.timePoints[this.currentIndex + 1] 
+                    : currentStart + 5; // 最后一个字幕默认持续5秒
+                
+                // 如果超出当前字幕范围，跳回到字幕开头
+                if (currentTime >= nextStart) {
+                    videoElement.currentTime = currentStart;
+                }
+            } else {
+                // 当前没有有效的字幕索引，尝试获取一个
+                this.currentIndex = this.getCurrentSubtitleIndex();
+            }
+        },
+        
+        // 切换重复播放状态
+        toggleRepeat() {
+            this.isRepeating = !this.isRepeating;
+            
+            if (this.isRepeating) {
+                // 获取当前字幕索引
+                const currentIndex = this.getCurrentSubtitleIndex();
+                
+                if (currentIndex === -1) {
+                    // 如果当前没有播放字幕，不启动循环
+                    this.showNotification('当前没有字幕，无法开启重复播放');
+                    this.isRepeating = false;
+                    return;
+                }
+                
+                this.currentIndex = currentIndex;
+                const subtitle = this.subtitles.body[currentIndex];
+                
+                // 开始循环检测
+                this.repeatTimerId = setInterval(() => this.checkAndLoopCurrentSubtitle(), 100);
+                
+                this.showNotification(`开始重复播放: ${subtitle.content}`);
+            } else {
+                // 停止循环
+                if (this.repeatTimerId !== null) {
+                    clearInterval(this.repeatTimerId);
+                    this.repeatTimerId = null;
+                }
+                
+                this.showNotification('已停止重复播放');
+            }
         }
     };
 
@@ -246,6 +329,11 @@
                 case 'l':
                     e.preventDefault();
                     SubtitleJumper.jumpToNext();
+                    break;
+                    
+                case 'r':
+                    e.preventDefault();
+                    SubtitleJumper.toggleRepeat();
                     break;
             }
         });
